@@ -10,7 +10,7 @@ This repository is actively being developed. Our core technology creates a **Dig
 
 When fully released, the OASIS Climate integration will enable full **Autopilot Mode** for your boiler or heat pump, providing an estimated energy saving. Stay tuned for the first release candidate, where you will be able to connect your smart devices and start collecting the data needed to build your Digital Twin.
 
-## Join the Climate-Positive Beta
+## 🌱 Join the Climate-Positive Beta
 
 We are currently opening our closed **Beta** for a limited number of early adopters who share our vision for a **greener economy**.
 

@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+*.log
+.mypy_cache
+.pytest_cache
+
+# HA / HACS
+.HA_VERSION
+.storage
+
+# Artifacts
+*.zip
