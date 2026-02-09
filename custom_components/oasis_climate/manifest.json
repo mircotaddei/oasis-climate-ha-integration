@@ -1,0 +1,12 @@
+{
+  "domain": "oasis_climate",
+  "name": "OASIS Climate",
+  "codeowners": ["@mircotaddei"],
+  "config_flow": true,
+  "documentation": "https://github.com/mircotaddei/oasis-climate-ha-integration",
+  "issue_tracker": "https://github.com/mircotaddei/oasis-climate-ha-integration/issues",
+  "integration_type": "device",
+  "iot_class": "cloud_polling",
+  "version": "0.0.1",
+  "requirements": []
+}

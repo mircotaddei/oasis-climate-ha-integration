@@ -1,0 +1,119 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to OASIS Climate",
+        "description": "Enter your API credentials to connect to the OASIS Cloud.",
+        "data": {
+          "api_url": "API URL",
+          "api_key": "API Key"
+        }
+      },
+      "select_home": {
+        "title": "Select Home",
+        "description": "Select the Home you want to manage with this instance.",
+        "data": {
+          "home_id": "Home"
+        }
+      },
+      "account_info": {
+        "title": "Account Overview",
+        "description": "{account_details}"
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the API.",
+      "invalid_auth": "Invalid API Key or URL.",
+      "creation_failed": "Failed to create the Home on the backend.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This Home is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OASIS Management",
+        "description": "Select an operation to perform.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "account_info": {
+        "title": "Account Overview",
+        "description": "{account_details}"
+      },
+      "tier_error": {
+        "title": "Limit Reached",
+        "description": "{error_details}"
+      },
+      "thermostat_add": {
+        "title": "Add Thermostat",
+        "description": "Enter the name for the new thermostat.",
+        "data": {
+          "name": "Thermostat Name"
+        }
+      },
+      "thermostat_select": {
+        "title": "Select Thermostat",
+        "description": "Select the thermostat you want to {action}.",
+        "data": {
+          "thermostat_id": "Thermostat"
+        }
+      },
+      "thermostat_edit": {
+        "title": "Rename Thermostat",
+        "description": "Enter the new name for the thermostat.",
+        "data": {
+          "name": "New Name"
+        }
+      },
+      "thermostat_remove": {
+        "title": "Remove Thermostat",
+        "description": "Are you sure you want to permanently delete **{name}**? This action cannot be undone."
+      },
+      "sensor_thermostat_select": {
+        "title": "Manage Sensors",
+        "description": "Select the thermostat to manage sensors for.",
+        "data": {
+          "thermostat_id": "Thermostat"
+        }
+      },
+      "sensor_menu": {
+        "title": "Sensor Actions",
+        "description": "Manage sensors for **{thermostat_name}**.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "sensor_type": {
+        "title": "Select Sensor Slot",
+        "description": "Which type of sensor do you want to configure on the backend?",
+        "data": {
+          "sensor_type": "Sensor Type"
+        }
+      },
+      "sensor_entity": {
+        "title": "Link Entity",
+        "description": "Select the Home Assistant entity to map to **{sensor_type}**.",
+        "data": {
+          "entity_id": "Entity"
+        }
+      },
+      "sensor_unlink": {
+        "title": "Unlink Sensor",
+        "description": "Select the sensor mapping to remove.",
+        "data": {
+          "sensor_id": "Sensor to remove"
+        }
+      }
+    },
+    "error": {
+      "api_error": "Communication error with OASIS API.",
+      "no_thermostats": "No thermostats found in this home.",
+      "no_sensors_to_remove": "No sensors linked to this thermostat."
+    }
+  }
+}
