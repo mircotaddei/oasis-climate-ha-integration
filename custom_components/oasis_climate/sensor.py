@@ -9,9 +9,11 @@ from homeassistant.core import HomeAssistant # type: ignore
 from homeassistant.helpers.entity import DeviceInfo # type: ignore
 from homeassistant.helpers.entity_platform import AddEntitiesCallback # type: ignore
 from homeassistant.helpers.update_coordinator import CoordinatorEntity # type: ignore
+from homeassistant.exceptions import HomeAssistantError # type: ignore
 
 from .const import DOMAIN, SENSOR_TYPES_REV
 from .coordinator import OasisUpdateCoordinator
+from .api.base_api import OasisApiError
 
 _LOGGER = logging.getLogger(__name__)
 

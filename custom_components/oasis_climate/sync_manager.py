@@ -10,9 +10,12 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er #
 from .api.client import OasisApiClient
 from .const import DOMAIN
 from .coordinator import OasisUpdateCoordinator
+from .api.base_api import OasisApiError
 
 _LOGGER = logging.getLogger(__name__)
 
+
+# --- SETUP LISTENERS ----------------------------------------------------------
 
 def setup_listeners(
     hass: HomeAssistant,
@@ -24,6 +27,8 @@ def setup_listeners(
     Register listeners for device and entity registry updates.
     This function is called once from __init__.py.
     """
+
+    # --- ON DEVICE UPDATE -----------------------------------------------------
 
     async def _on_device_update(event: Event) -> None:
         """Handle device registry updates, primarily for thermostat renames."""
@@ -56,6 +61,8 @@ def setup_listeners(
                         # Request a refresh to get the latest state from backend
                         await coordinator.async_request_refresh()
 
+                except (OasisApiError) as err:
+                    _LOGGER.error("Rename failed on backend: {err.detail}")
                 except (IndexError, ValueError):
                     _LOGGER.error(
                         "Failed to parse thermostat ID from identifier: %s", identifier
@@ -94,6 +101,8 @@ def setup_listeners(
                 await client.sensors.update(s_id, {"name": new_name})
                 await coordinator.async_request_refresh()
 
+        except (OasisApiError) as err:
+            _LOGGER.error("Rename failed on backend: {err.detail}")
         except (IndexError, ValueError) as e:
             _LOGGER.error("Error processing sensor rename event: %s", e)
 

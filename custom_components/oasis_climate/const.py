@@ -12,7 +12,8 @@ CONF_CREATE_NEW_HOME = "create_new_home"
 CONF_NEW_HOME_NAME = "new_home_name"
 
 # Defaults
-DEFAULT_API_URL = "http://host.docker.internal:8000/api/v1"
+# DEFAULT_API_URL = "http://host.docker.internal:8000/api/v1"
+DEFAULT_API_URL = "https://oasis-climate.com/api/v1"
 
 # --- SENSOR TYPES ---
 # Mapping: Label -> Backend Enum Value

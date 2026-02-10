@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from collections.abc import Awaitable, Callable
 
 import voluptuous as vol
 
@@ -14,7 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession # type:
 from homeassistant.helpers import (selector, entity_registry as er, device_registry as dr,) # type: ignore
 
 from .api.client import OasisApiClient
-from .api.base_api import OasisTierLimitError
+from .api.base_api import OasisApiError
 from .coordinator import OasisUpdateCoordinator
 from .const import (
     DOMAIN,
@@ -35,7 +36,75 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
-class OasisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+# --- AOSIS COMMON FLOW ------------------------------------------------------------
+
+class OasisCommonFlow:
+    """Shared logic for handling API errors in both Config and Options flows."""
+
+    def __init__(self) -> None:
+        """Initialize common flow."""
+        # Variabili per memorizzare lo stato dell'errore e il prossimo passo
+        self._last_error_title: str | None = None
+        self._last_error_detail: str | None = None
+        self._next_step_callback: Callable[[], Awaitable[FlowResult]] | None = None
+
+
+    # --- HANDLE API ERROR -------------------------------------------------------
+
+    async def _handle_api_error(
+        self, 
+        err: OasisApiError, 
+        next_step: Callable[[], Awaitable[FlowResult]] | None = None
+    ) -> FlowResult:
+        """
+        DRY Helper: Save error details and transition to error step.
+        
+        :param err: The API error to handle.
+        :param next_step: The next step to transition to.
+        """
+        self._last_error_title = err.title
+        self._last_error_detail = err.detail
+        self._next_step_callback = next_step
+        return await self.async_step_api_error()
+
+
+    # --- STEP API ERROR --------------------------------------------------------
+
+    async def async_step_api_error(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Display a generic error modal from backend."""
+        if user_input is not None:
+
+            if self._next_step_callback:
+                callback = self._next_step_callback
+                self._next_step_callback = None
+                return await callback()
+            
+            if isinstance(self, OasisOptionsFlowHandler):
+                return await self.async_step_init()
+            else:
+                return await self.async_step_user()
+
+        title = getattr(self, "_last_error_title", "Error")
+        detail = getattr(self, "_last_error_detail", "Unknown error occurred.")
+
+        msg = (
+            f"### ⛔ {title}\n\n"
+            f"{detail}\n\n"
+            "Check your configuration or plan limits."
+        )
+
+        return self.async_show_form(
+            step_id="api_error",
+            data_schema=vol.Schema({}),
+            description_placeholders={"error_details": msg},
+        )
+    
+
+# --- OASIS CONFIG FLOW ----------------------------------------------------------
+
+class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN):
     """Handle a config flow for OASIS Climate."""
 
     VERSION = 0
@@ -68,12 +137,12 @@ class OasisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             try:
-                # Verifica autenticazione
                 if await self._client.async_validate_auth():
-                    # Se ok, passa alla selezione della casa
                     return await self.async_step_select_home()
                 else:
                     errors["base"] = "invalid_auth"
+            except OasisApiError as err:
+                return await self._handle_api_error(err)
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "cannot_connect"
@@ -95,17 +164,17 @@ class OasisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             homes = await self._client.homes.list()
+        except OasisApiError as err:
+                return await self._handle_api_error(err)
         except Exception:
             return self.async_abort(reason="cannot_connect")
 
         if homes is None:
             return self.async_abort(reason="cannot_connect")
 
-        # SCENARIO A: Nessuna casa esistente -> Creazione Automatica
         if not homes:
             return await self._create_home_automatically()
 
-        # SCENARIO B: Case esistenti -> Selezione Utente
         options = {str(home["id"]): home["name"] for home in homes}
         options["CREATE_NEW"] = f"Create new home: {self.hass.config.location_name}"
 
@@ -140,8 +209,9 @@ class OasisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             new_home = await self._client.homes.create(name=ha_name) # TODO move to api package
             if not new_home:
                 return self.async_abort(reason="creation_failed")
-            
             return self._async_create_entry(new_home["id"], new_home["name"])
+        except OasisApiError as err:
+                return await self._handle_api_error(err)
         except Exception:
             _LOGGER.exception("Error creating home")
             return self.async_abort(reason="creation_failed")
@@ -175,7 +245,7 @@ class OasisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 # --- OASIS OPTIONS FLOW HANDLER -----------------------------------------------
 
-class OasisOptionsFlowHandler(config_entries.OptionsFlow):
+class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
     """Handle options flow for Oasis (Thermostats & Sensors setup)."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
@@ -196,6 +266,12 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
     @property
     def _home_id(self) -> int:
         return self.config_entry.data[CONF_HOME_ID]
+
+
+    # --- FLOW STEPS ----------------------------------------------------------
+
+
+    # --- STEP INIT -----------------------------------------------------------
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -248,6 +324,8 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
 
         try:
             user_data = await self._client.user.get_me()
+        except OasisApiError as err:
+                return await self._handle_api_error(err)
         except Exception:
             return self.async_abort(reason="cannot_connect")
 
@@ -287,34 +365,7 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=None, # No input fields, only "Next" button
             description_placeholders={"account_details": msg},
         )
-    
-
-    # --- STEP TIER ERROR --------------------------------------------------------
-
-    async def async_step_tier_error(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Display a 'modal' for tier limits."""
-        if user_input is not None:
-            return await self.async_step_init()
-
-        # Recupera il messaggio salvato in self (vedi punto successivo)
-        error_msg = getattr(self, "_last_error_msg", "Unknown error")
-        upgrade_url = getattr(self, "_last_upgrade_url", "#")
-
-        msg = (
-            f"### ⛔ Operation Denied\n\n"
-            f"{error_msg}\n\n"
-            f"To continue, you need to upgrade your plan.\n\n"
-            f"[Upgrade Now]({upgrade_url})"
-        )
-
-        return self.async_show_form(
-            step_id="tier_error",
-            data_schema=vol.Schema({}),
-            description_placeholders={"error_details": msg},
-        )
-    
+        
 
     # --- THERMOSTAT CRUD -------------------------------------------------------
     
@@ -331,15 +382,10 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
             name = user_input["name"]
             try:
                 await self._client.thermostats.create(self._home_id, name)
-                # await self._coordinator.async_request_refresh()
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 return await self.async_step_init()
-            
-            except OasisTierLimitError as err:
-                self._last_error_msg = err.message
-                self._last_upgrade_url = err.upgrade_url
-                return await self.async_step_tier_error()
-            
+            except OasisApiError as err:
+                return await self._handle_api_error(err)
             except Exception:
                 _LOGGER.exception("Error creating thermostat")
                 errors["base"] = "api_error"
@@ -357,6 +403,7 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Select a thermostat to edit or remove."""
+
         thermostats = self._coordinator.data.get("thermostats", {})
         if not thermostats:
             return self.async_abort(reason="no_thermostats")
@@ -392,11 +439,14 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
                 await self._client.thermostats.update_config(t_id, {"name": new_name}) # type: ignore
                 await self._coordinator.async_request_refresh()
                 return await self.async_step_init()
+            except OasisApiError as err:
+                return await self._handle_api_error(err)
             except Exception:
                 _LOGGER.exception("Error updating thermostat")
                 errors["base"] = "api_error"
 
         current_name = self._coordinator.data["thermostats"][t_id]["name"]
+
         return self.async_show_form(
             step_id="thermostat_edit",
             data_schema=vol.Schema({vol.Required("name", default=current_name): str}),
@@ -419,15 +469,16 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
                 )
                 if device:
                     dev_reg.async_remove_device(device.id)
-
-                # 3. Aggiorna dati
                 await self._coordinator.async_request_refresh()
                 return await self.async_step_init()
+            except OasisApiError as err:
+                return await self._handle_api_error(err)
             except Exception:
                 _LOGGER.exception("Error deleting thermostat")
                 return self.async_abort(reason="api_error")
 
         t_name = self._coordinator.data["thermostats"][self._selected_thermostat_id]["name"]
+
         return self.async_show_form(
             step_id="thermostat_remove",
             description_placeholders={"name": t_name},
@@ -551,17 +602,14 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
                     sensor_type=backend_type,
                     name=friendly_name
                 )
-                
-                # Aggiorna coordinator per riflettere le modifiche
-                # await self._coordinator.async_request_refresh()
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 return await self.async_step_init()
-                
+            except OasisApiError as err:
+                return await self._handle_api_error(err)
             except Exception:
                 _LOGGER.exception("Error linking sensor")
                 errors["base"] = "api_error"
 
-        # Configura il selettore con i filtri calcolati
         selector_config = selector.EntitySelectorConfig(
             domain=domain_filter,
             device_class=device_class,
@@ -624,8 +672,9 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
                     ent_reg.async_remove(entity_id)
 
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                # await self._coordinator.async_request_refresh()
                 return await self.async_step_init()
+            except OasisApiError as err:
+                return await self._handle_api_error(err)
             except Exception:
                 _LOGGER.exception("Error deleting sensor mapping")
                 errors["base"] = "api_error"
@@ -639,3 +688,4 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow):
             ),
             errors=errors
         )
+    

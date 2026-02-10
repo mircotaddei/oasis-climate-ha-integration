@@ -5,12 +5,13 @@ import logging
 from datetime import timedelta
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.config_entries import ConfigEntry # type: ignore
+from homeassistant.core import HomeAssistant # type: ignore
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed # type: ignore
 
 from .const import DOMAIN, CONF_HOME_ID
 from .api.client import OasisApiClient
+from .api.base_api import OasisApiError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +83,9 @@ class OasisUpdateCoordinator(DataUpdateCoordinator):
                 structured_data["thermostats"][t_id] = thermostat
 
             return structured_data
+
+        except OasisApiError as err:
+            raise UpdateFailed(f"API Error: {err.title} - {err.detail}") from err
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err

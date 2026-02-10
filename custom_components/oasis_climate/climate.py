@@ -11,9 +11,11 @@ from homeassistant.core import HomeAssistant # type: ignore
 from homeassistant.helpers.entity import DeviceInfo # type: ignore
 from homeassistant.helpers.entity_platform import AddEntitiesCallback # type: ignore
 from homeassistant.helpers.update_coordinator import CoordinatorEntity # type: ignore
+from homeassistant.exceptions import HomeAssistantError # type: ignore
 
 from .const import DOMAIN
 from .coordinator import OasisUpdateCoordinator
+from .api.base_api import OasisApiError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,9 +103,14 @@ class OasisThermostat(CoordinatorEntity, ClimateEntity):
         api_mode = mode_map.get(hvac_mode, "off")
 
         _LOGGER.debug("Setting HVAC mode for %s to %s", self.unique_id, api_mode)
-        success = await self.coordinator.client.thermostats.update_state(
-            self._id, {"hvac_mode": api_mode}
-        )
+        try:
+            success = await self.coordinator.client.thermostats.update_state(
+                self._id, {"hvac_mode": api_mode}
+            )
+        except OasisApiError as err:
+            _LOGGER.error("Error setting HVAC mode: %s", err)
+            raise HomeAssistantError(f"Cannot set mode: {err.detail}") from err
+            
         
         if success:
             # Request a refresh to immediately reflect the change in HA state
@@ -115,13 +122,18 @@ class OasisThermostat(CoordinatorEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
         if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            
             _LOGGER.debug("Setting target temperature for %s to %s", self.unique_id, temp)
             
             # Assuming heat_setpoint for simplicity. A real implementation
             # might need to check the current HVAC mode.
-            success = await self.coordinator.client.thermostats.update_state(
-                self._id, {"heat_setpoint": temp}
-            )
+            try:
+                success = await self.coordinator.client.thermostats.update_state(
+                    self._id, {"heat_setpoint": temp}
+                )
+            except OasisApiError as err:
+                _LOGGER.error("Error setting temperature: %s", err)
+                raise HomeAssistantError(f"Cannot set temperature: {err.detail}") from err
             
             if success:
                 await self.coordinator.async_request_refresh()
