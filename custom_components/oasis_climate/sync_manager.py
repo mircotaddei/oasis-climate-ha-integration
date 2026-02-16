@@ -79,11 +79,11 @@ def setup_listeners(
         entity_entry = ent_reg.async_get(entity_id)
 
         # Ensure the entity belongs to our integration and is a sensor
-        if not entity_entry or entity_entry.platform != DOMAIN or not entity_entry.unique_id.startswith("oasis_sensor_"):
+        if not entity_entry or entity_entry.platform != DOMAIN or not entity_entry.device_id.startswith("oasis_sensor_"):
             return
 
         try:
-            s_id = int(entity_entry.unique_id.split("_")[2])
+            s_id = int(entity_entry.device_id.split("_")[2])
             new_name = entity_entry.name or entity_entry.original_name
 
             # Find the sensor in coordinator data to get its current name

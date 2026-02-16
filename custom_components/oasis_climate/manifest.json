@@ -8,5 +8,6 @@
   "integration_type": "device",
   "iot_class": "cloud_polling",
   "version": "0.0.1",
-  "requirements": []
+  "requirements": [],
+  "logo": "/local/community/oasis_climate/logo.png"
 }

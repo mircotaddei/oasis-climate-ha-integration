@@ -7,13 +7,16 @@ CONF_API_URL = "api_url"
 CONF_API_KEY = "api_key"
 CONF_HOME_ID = "home_id"
 
+
 # Options Flow Keys
 CONF_CREATE_NEW_HOME = "create_new_home"
 CONF_NEW_HOME_NAME = "new_home_name"
 
+
 # Defaults
-# DEFAULT_API_URL = "http://host.docker.internal:8000/api/v1"
-DEFAULT_API_URL = "https://oasis-climate.com/api/v1"
+DEFAULT_API_URL = "http://host.docker.internal:8000/api/v1"
+# DEFAULT_API_URL = "https://oasis-climate.com/api/v1"
+
 
 # --- SENSOR TYPES ---
 # Mapping: Label -> Backend Enum Value
@@ -32,6 +35,7 @@ SENSOR_TYPES = {
     "CO2": "co2"
 }
 
+
 # Reverse mapping for UI display
 SENSOR_TYPES_REV = {v: k for k, v in SENSOR_TYPES.items()}
 
@@ -49,3 +53,16 @@ SENSOR_DEVICE_CLASSES = {
     "door": "door",     # Binary Sensor
     "presence": "occupancy" # Binary Sensor
 }
+
+# Sensor Mappings
+CONF_SENSOR_MAPPINGS = "sensor_mappings" # Dict[oasis_device_id, ha_entity_id]
+
+# Telemetry Configuration Keys
+CONF_TELEMETRY_ENABLED = "telemetry_enabled"
+CONF_TELEMETRY_BATCH_SIZE = "telemetry_batch_size"
+CONF_TELEMETRY_FLUSH_INTERVAL = "telemetry_flush_interval"
+
+# Telemetry Defaults
+DEFAULT_TELEMETRY_ENABLED = True
+DEFAULT_TELEMETRY_BATCH_SIZE = 20
+DEFAULT_TELEMETRY_FLUSH_INTERVAL = 300  # 5 minutes in seconds

@@ -2,6 +2,9 @@
 from typing import Any
 from .base_api import OasisBaseApi
 
+
+# --- USER API ----------------------------------------------------------------
+
 class UserApi(OasisBaseApi):
     """Handles user-related endpoints."""
 

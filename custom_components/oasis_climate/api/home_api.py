@@ -2,6 +2,9 @@
 from typing import Any
 from .base_api import OasisBaseApi
 
+
+# --- HOME API ----------------------------------------------------------------
+
 class HomeApi(OasisBaseApi):
     """Handles home-related endpoints."""
 
@@ -15,9 +18,11 @@ class HomeApi(OasisBaseApi):
 
     # --- CREATE ---------------------------------------------------------------
 
-    async def create(self, name: str) -> dict[str, Any] | None:
+    async def create(self, name: str, **kwargs: Any) -> dict[str, Any] | None:
         """Create a new home."""
-        return await self._request("POST", "/homes", data={"name": name})
+        payload = {"name": name}
+        payload.update(kwargs)
+        return await self._request("POST", "/homes", data=payload)
 
 
     # --- DELETE ---------------------------------------------------------------

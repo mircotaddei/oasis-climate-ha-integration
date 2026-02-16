@@ -15,6 +15,9 @@ from .api.base_api import OasisApiError
 
 _LOGGER = logging.getLogger(__name__)
 
+
+# --- OASIS UPDATE COORDINATOR ------------------------------------------------
+
 class OasisUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
@@ -31,61 +34,79 @@ class OasisUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=1),
         )
 
+
+    # --- UPDATE DATA ----------------------------------------------------------
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data and restructure it for easy access."""
         try:
-            # 1. Fetch the full hierarchy for the user
-            homes = await self.client.homes.list()
+            try:
+                homes = await self.client.homes.list()
+            except Exception as err:
+                _LOGGER.error("API Call Failed: client.homes.list() - %s", err)
+                raise
+
             if not homes:
                 _LOGGER.warning("No homes found for this user.")
                 return {}
 
-            # 2. Find the specific home managed by this config entry
-            # Ensure home_id is a string for consistent comparison
             home_id_str = str(self.entry.data[CONF_HOME_ID])
             selected_home = next(
                 (h for h in homes if str(h.get("id")) == home_id_str), None
             )
             
             if not selected_home:
-                _LOGGER.warning("Home ID %s not found in backend data.", home_id_str)
+                _LOGGER.warning("Home ID %s not found in backend data. Available homes: %s", home_id_str, [h.get("id") for h in homes])
                 return {}
 
-            # 3. Restructure the data for efficient O(1) access in platforms
-            # Final structure:
-            # {
-            #    "home": { ...home_data... },
-            #    "thermostats": {
-            #        t_id: {
-            #            ...thermostat_data...,
-            #            "sensors_map": { s_id: sensor_data }
-            #        }
-            #    }
-            # }
-            
             structured_data = {
                 "home": selected_home,
                 "thermostats": {}
             }
 
             for thermostat in selected_home.get("thermostats", []):
-                t_id = thermostat["id"]
+                t_device_id = thermostat.get("device_id")
+                if not t_device_id:
+                    t_device_id = thermostat.get("unique_id")
+                if not t_device_id:
+                    t_device_id = str(thermostat.get("id"))
                 
-                # Create a map of sensors indexed by their ID for O(1) lookup
-                sensors_map = {
-                    sensor["id"]: sensor for sensor in thermostat.get("sensors", [])
-                }
+                thermostat["device_id"] = t_device_id
+
+                # --- Fetch Cloud Config ---
+                try:
+                    cloud_config = await self.client.thermostats.get_cloud_config(t_device_id)
+                    thermostat["cloud_config"] = cloud_config or {}
+                except Exception as err:
+                    _LOGGER.warning("Failed to fetch cloud config for thermostat %s: %s", t_device_id, err)
+                    thermostat["cloud_config"] = {}
+
+                # --- Process Sensors ---
+                sensors_map = {}
+                for sensor in thermostat.get("sensors", []):
+                    s_device_id = sensor.get("device_id") or sensor.get("unique_id")
+                    if not s_device_id:
+                        s_device_id = str(sensor.get("id"))
+                    
+                    meta = sensor.get("meta")
+                    if meta is None:
+                        meta = {}
+                        sensor["meta"] = meta
+
+                    if "local_id" not in meta and "local_id" in sensor:
+                        meta["local_id"] = sensor["local_id"]
+
+                    sensors_map[s_device_id] = sensor
                 
-                # Add the map to the thermostat data
                 thermostat["sensors_map"] = sensors_map
-                
-                # Add the thermostat to the main structure
-                structured_data["thermostats"][t_id] = thermostat
+                structured_data["thermostats"][t_device_id] = thermostat
 
             return structured_data
 
         except OasisApiError as err:
-            raise UpdateFailed(f"API Error: {err.title} - {err.detail}") from err
-
+            _LOGGER.error("OASIS API Error: %s - %s", err.title, err.detail)
+            raise UpdateFailed(f"API Error - {err.title}: {err.detail}") from err
+            
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+            _LOGGER.exception("Unexpected error fetching OASIS data")
+            raise UpdateFailed(f"Error communicating with API: {type(err).__name__} - {err}") from err

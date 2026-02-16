@@ -12,7 +12,8 @@ from homeassistant.const import CONF_NAME # type: ignore
 from homeassistant.core import HomeAssistant, callback # type: ignore
 from homeassistant.data_entry_flow import FlowResult # type: ignore
 from homeassistant.helpers.aiohttp_client import async_get_clientsession # type: ignore
-from homeassistant.helpers import (selector, entity_registry as er, device_registry as dr,) # type: ignore
+from homeassistant.helpers import (selector, entity_registry as er, device_registry as dr, area_registry as ar,) # type: ignore
+from homeassistant.data_entry_flow import FlowHandler # type: ignore
 
 from .api.client import OasisApiClient
 from .api.base_api import OasisApiError
@@ -38,15 +39,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 # --- AOSIS COMMON FLOW ------------------------------------------------------------
 
-class OasisCommonFlow:
+class OasisCommonFlow(FlowHandler):
     """Shared logic for handling API errors in both Config and Options flows."""
-
-    def __init__(self) -> None:
-        """Initialize common flow."""
-        # Variabili per memorizzare lo stato dell'errore e il prossimo passo
-        self._last_error_title: str | None = None
-        self._last_error_detail: str | None = None
-        self._next_step_callback: Callable[[], Awaitable[FlowResult]] | None = None
 
 
     # --- HANDLE API ERROR -------------------------------------------------------
@@ -63,7 +57,10 @@ class OasisCommonFlow:
         :param next_step: The next step to transition to.
         """
         self._last_error_title = err.title
-        self._last_error_detail = err.detail
+        if err.code:
+            self._last_error_detail = f"**Code:** `{err.code}`\n\n{err.detail}"
+        else:
+            self._last_error_detail = err.detail
         self._next_step_callback = next_step
         return await self.async_step_api_error()
 
@@ -104,7 +101,7 @@ class OasisCommonFlow:
 
 # --- OASIS CONFIG FLOW ----------------------------------------------------------
 
-class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN):
+class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN): # type: ignore
     """Handle a config flow for OASIS Climate."""
 
     VERSION = 0
@@ -163,7 +160,7 @@ class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN)
         errors: dict[str, str] = {}
 
         try:
-            homes = await self._client.homes.list()
+            homes = await self._client.homes.list() # type: ignore
         except OasisApiError as err:
                 return await self._handle_api_error(err)
         except Exception:
@@ -203,10 +200,16 @@ class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN)
     # --- CREATE HOME AUTOMATICALLY --------------------------------------------
 
     async def _create_home_automatically(self) -> FlowResult:
-        """Helper to create a home using HA instance name."""
-        ha_name = self.hass.config.location_name
+        """Helper to create a home using HA instance name, location, and timezone."""
+        ha_config = self.hass.config
         try:
-            new_home = await self._client.homes.create(name=ha_name) # TODO move to api package
+            new_home = await self._client.homes.create( # type: ignore
+                name=ha_config.location_name,
+                latitude=ha_config.latitude,
+                longitude=ha_config.longitude,
+                timezone=ha_config.time_zone,
+                # city is not available in HA -> leave empty
+            )
             if not new_home:
                 return self.async_abort(reason="creation_failed")
             return self._async_create_entry(new_home["id"], new_home["name"])
@@ -229,7 +232,7 @@ class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN)
             CONF_NAME: home_name
         }
 
-        return self.async_create_entry(title=home_name, data=data)
+        return self.async_create_entry(title="Oasis Climate", data=data)
 
 
     # --- GET OPTIONS FLOW -----------------------------------------------------
@@ -251,7 +254,7 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry_init = config_entry
-        self._selected_thermostat_id: int | None = None
+        self._selected_thermostat_id: str | None = None
         self._selected_sensor_type_label: str | None = None
         self._action: str | None = None
 
@@ -390,11 +393,36 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
                 _LOGGER.exception("Error creating thermostat")
                 errors["base"] = "api_error"
 
+        # Recupera le aree configurate in HA
+        area_reg = ar.async_get(self.hass)
+        # Crea una lista ordinata dei nomi delle aree
+        area_names = sorted([area.name for area in area_reg.async_list_areas()])
+        
+        # Se non ci sono aree, fallback a text field semplice
+        if not area_names:
+            schema = vol.Schema({vol.Required("name"): str})
+        else:
+            # Usa un selettore che permette di scegliere dalla lista O scrivere un valore custom
+            schema = vol.Schema({
+                vol.Required("name"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=area_names,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        custom_value=True # Permette di scrivere un nome nuovo
+                    )
+                )
+            })
+
         return self.async_show_form(
             step_id="thermostat_add",
-            data_schema=vol.Schema({vol.Required("name"): str}),
+            data_schema=schema,
             errors=errors,
         )
+        # return self.async_show_form(
+        #     step_id="thermostat_add",
+        #     data_schema=vol.Schema({vol.Required("name"): str}),
+        #     errors=errors,
+        # )
 
 
     # --- STEP THERMOSTAT SELECT ------------------------------------------------
@@ -408,10 +436,10 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
         if not thermostats:
             return self.async_abort(reason="no_thermostats")
 
-        options = {str(t_id): t_data["name"] for t_id, t_data in thermostats.items()}
+        options = {t_id: t_data["name"] for t_id, t_data in thermostats.items()}
 
         if user_input is not None:
-            self._selected_thermostat_id = int(user_input["thermostat_id"])
+            self._selected_thermostat_id = user_input["thermostat_id"]
             if self._action == "edit":
                 return await self.async_step_thermostat_edit()
             elif self._action == "remove":
@@ -499,10 +527,10 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
         if not thermostats:
             return self.async_abort(reason="no_thermostats")
 
-        options = {str(t_id): t_data["name"] for t_id, t_data in thermostats.items()}
+        options = {t_id: t_data["name"] for t_id, t_data in thermostats.items()}
 
         if user_input is not None:
-            self._selected_thermostat_id = int(user_input["thermostat_id"])
+            self._selected_thermostat_id = user_input["thermostat_id"]
             return await self.async_step_sensor_menu()
 
         return self.async_show_form(
@@ -647,25 +675,25 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
 
         # Crea opzioni: "Nome Sensore (ID)"
         options = {
-            str(s_id): f"{s_data['name']} ({s_data['type']})" 
+            s_id: f"{s_data['name']} ({s_data['type']})" 
             for s_id, s_data in sensors_map.items()
         }
 
         if user_input is not None:
-            sensor_id = int(user_input["sensor_id"])
+            sensor_id = user_input["sensor_id"]
             try:
                 # --- API CALL: UNLINK SENSOR ---
                 await self._client.sensors.delete(sensor_id)
                 ent_reg = er.async_get(self.hass)
-                unique_id = f"oasis_sensor_{sensor_id}"
+                device_id = f"oasis_sensor_{sensor_id}"
                 
                 # Cerchiamo l'entity_id nel dominio 'sensor' (o 'binary_sensor' per sicurezza)
-                # La firma è: async_get_entity_id(domain, platform, unique_id)
-                entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+                # La firma è: async_get_entity_id(domain, platform, device_id)
+                entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, device_id)
                 
                 if not entity_id:
                     # Tentativo fallback se in futuro implementi binary_sensor
-                    entity_id = ent_reg.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
+                    entity_id = ent_reg.async_get_entity_id("binary_sensor", DOMAIN, device_id)
                 
                 if entity_id:
                     _LOGGER.debug("Removing unlinked entity from registry: %s", entity_id)

@@ -14,15 +14,11 @@
         "description": "Select the Home you want to manage with this instance.",
         "data": {
           "home_id": "Home"
-        },
-      "api_error": {
-        "title": "Backend Error",
-        "description": "{error_details}"
-      }
+        }
       },
-      "account_info": {
-        "title": "Account Overview",
-        "description": "{account_details}"
+      "api_error": {
+        "title": "Connection Error",
+        "description": "{error_details}"
       }
     },
     "error": {
@@ -50,7 +46,7 @@
         "description": "{account_details}"
       },
       "api_error": {
-        "title": "Backend Error",
+        "title": "Operation Failed",
         "description": "{error_details}"
       },
       "thermostat_add": {
@@ -118,6 +114,21 @@
       "api_error": "Communication error with OASIS API.",
       "no_thermostats": "No thermostats found in this home.",
       "no_sensors_to_remove": "No sensors linked to this thermostat."
+    }
+  },
+  "entity": {
+    "switch": {
+      "telemetry_enabled": {
+        "name": "OASIS Telemetry"
+      }
+    },
+    "number": {
+      "telemetry_batch_size": {
+        "name": "Telemetry Batch Size"
+      },
+      "telemetry_flush_interval": {
+        "name": "Telemetry Flush Interval"
+      }
     }
   }
 }
