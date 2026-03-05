@@ -10,6 +10,8 @@ from homeassistant.config_entries import ConfigEntry  # type: ignore
 from homeassistant.helpers.event import async_track_state_change_event  # type: ignore
 from homeassistant.const import STATE_ON, STATE_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN  # type: ignore
 
+from .coordinator import OasisUpdateCoordinator
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -17,6 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 
 class TelemetryManager:
     """Handles data collection, buffering and batch sending to OASIS."""
+
+    coordinator: OasisUpdateCoordinator
 
     def __init__(self, hass: HomeAssistant, client: Any, coordinator: Any, entry: ConfigEntry) -> None:
         """Initialize the manager."""
@@ -138,8 +142,9 @@ class TelemetryManager:
 
             # Add to buffer
             reading = {
-                "device_id": sensor_device_id, # Backend expects the sensor's device_id here
+                "device_id": sensor_device_id,
                 "value": value,
+                "error_count": 0,
                 "timestamp": new_state.last_changed.isoformat()
             }
             
@@ -199,8 +204,12 @@ class TelemetryManager:
         _LOGGER.debug("Flushing telemetry batch (%d items) for device %s", len(readings_to_send), device_id)
 
         # Send via API
-        success = await self.client.async_send_telemetry(device_id, readings_to_send)
+        response = await self.client.async_send_telemetry(device_id, readings_to_send)
         
-        if not success:
-            _LOGGER.warning("Failed to send telemetry batch. Data lost.")
-            # Future improvement: Implement retry buffer with limits
+        if response.get("synced") is False:
+            _LOGGER.info(
+                "Piggyback sync requested for device %s. Triggering targeted refresh.",
+                device_id
+            )
+            # Chiamiamo una nuova funzione nel coordinator per l'aggiornamento mirato
+            await self.coordinator.async_request_targeted_refresh(device_id)

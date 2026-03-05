@@ -46,4 +46,5 @@ class OasisApiClient:
             "timestamp": None, # Backend will use arrival time if None
             "readings": readings
         }
-        return await self.sensors.send_telemetry(payload)
+        result = await self.sensors.send_telemetry(payload)
+        return result

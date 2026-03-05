@@ -40,6 +40,7 @@ class OasisUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data and restructure it for easy access."""
         try:
+            # 1. Fetch the full hierarchy for the user
             try:
                 homes = await self.client.homes.list()
             except Exception as err:
@@ -50,21 +51,24 @@ class OasisUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning("No homes found for this user.")
                 return {}
 
+            # 2. Find the specific home managed by this config entry
             home_id_str = str(self.entry.data[CONF_HOME_ID])
             selected_home = next(
                 (h for h in homes if str(h.get("id")) == home_id_str), None
             )
             
             if not selected_home:
-                _LOGGER.warning("Home ID %s not found in backend data. Available homes: %s", home_id_str, [h.get("id") for h in homes])
+                _LOGGER.warning("Home ID %s not found in backend data.", home_id_str)
                 return {}
 
+            # 3. Restructure the data
             structured_data = {
                 "home": selected_home,
                 "thermostats": {}
             }
 
-            for thermostat in selected_home.get("thermostats", []):
+            for thermostat in selected_home.get("thermostats",[]):
+                # Robust ID retrieval
                 t_device_id = thermostat.get("device_id")
                 if not t_device_id:
                     t_device_id = thermostat.get("unique_id")
@@ -72,6 +76,11 @@ class OasisUpdateCoordinator(DataUpdateCoordinator):
                     t_device_id = str(thermostat.get("id"))
                 
                 thermostat["device_id"] = t_device_id
+
+                # Normalize thermostat meta
+                t_meta = thermostat.get("meta")
+                if t_meta is None:
+                    thermostat["meta"] = {}
 
                 # --- Fetch Cloud Config ---
                 try:
@@ -110,3 +119,42 @@ class OasisUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.exception("Unexpected error fetching OASIS data")
             raise UpdateFailed(f"Error communicating with API: {type(err).__name__} - {err}") from err
+        
+
+    # --- REQUEST TARGETED REFRESH ---------------------------------------------
+
+    async def async_request_targeted_refresh(self, device_id: str) -> None:
+        """
+        Request a targeted refresh for a single device after a piggyback signal.
+        This fetches the latest config for one device and merges it into existing data.
+        """
+        _LOGGER.debug("Executing targeted refresh for device_id: %s", device_id)
+        try:
+            new_config = await self.client.thermostats.get_cloud_config(device_id)
+            if not new_config:
+                _LOGGER.warning("Targeted refresh for %s failed: No config returned.", device_id)
+                return
+
+            current_data = dict(self.data)
+            
+            # Troviamo il termostato e aggiorniamo solo i campi rilevanti
+            if device_id in current_data.get("thermostats", {}):
+                # Qui aggiorniamo i campi che ci aspettiamo cambino (stato e config)
+                # NOTA: get_cloud_config restituisce solo la config, non lo stato completo.
+                # Per un refresh completo del dispositivo, servirebbe un GET /devices/{id}
+                # Assumiamo per ora che get_cloud_config sia sufficiente.
+                # Se non lo è, dovremo aggiungere un GET /devices/{id} e fare un merge più profondo.
+                
+                # Esempio di merge (da adattare se la risposta di config è diversa)
+                current_data["thermostats"][device_id].update(new_config)
+                
+                # 3. Notifica a HA che i dati sono cambiati
+                self.async_set_updated_data(current_data)
+                _LOGGER.info("Targeted refresh for %s completed successfully.", device_id)
+            else:
+                _LOGGER.warning("Device %s requested for refresh not found in current data.", device_id)
+
+        except OasisApiError as err:
+            _LOGGER.error("Targeted refresh for %s failed: %s - %s", device_id, err.title, err.detail)
+        except Exception:
+            _LOGGER.exception("Unexpected error during targeted refresh for %s", device_id)

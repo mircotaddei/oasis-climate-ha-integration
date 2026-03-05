@@ -2,6 +2,9 @@
 from typing import Any
 from .base_api import OasisBaseApi
 
+
+# --- SENSOR API ---------------------------------------------------------------
+
 class SensorApi(OasisBaseApi):
     """Handles sensor-related endpoints."""
 
@@ -10,8 +13,8 @@ class SensorApi(OasisBaseApi):
 
     async def list_by_thermostat(self, thermostat_id: str) -> list[dict[str, Any]] | None:
         """List sensors for a specific thermostat."""
-        result = await self._request("GET", f"/devices/{thermostat_id}/sensors")
-        return result if isinstance(result, list) else None
+        data = await self._request("GET", f"/devices/{thermostat_id}/sensors")
+        return data if isinstance(data, list) else None
 
 
     # --- CREATE ---------------------------------------------------------------
@@ -20,12 +23,13 @@ class SensorApi(OasisBaseApi):
         """Map a new sensor to a thermostat."""
         payload = {
             "local_id": entity_id,
-            "integration_source": "HA",
+            "integration_source": "ha",
             "type": sensor_type,
             "name": name,
+            "is_virtual": False,
+            "meta": {}
         }
-        result = await self._request("POST", f"/devices/{thermostat_id}/sensors", data=payload)
-        return result
+        return await self._request("POST", f"/devices/{thermostat_id}/sensors", data=payload)
 
 
     # --- DELETE ---------------------------------------------------------------
@@ -40,18 +44,12 @@ class SensorApi(OasisBaseApi):
     
     async def update(self, sensor_id: str, data: dict[str, Any]) -> bool:
         """Update sensor details (e.g., name)."""
-        # Endpoint: PATCH /sensors/{id}
         result = await self._request("PATCH", f"/sensors/{sensor_id}", data=data)
         return result is not None
 
-    
-    # --- SEND TELEMETRY BATCH -------------------------------------------------
 
-    async def send_telemetry(self, telemetry_payload: dict[str, Any]) -> bool:
-        """
-        Send a batch of sensor readings to the backend.
-        Payload follows the TelemetryData schema.
-        """
-        # Endpoint: POST /telemetry
-        result = await self._request("POST", "/telemetry", data=telemetry_payload)
-        return result is not None
+    # --- SEND TELEMETRY -------------------------------------------------------
+
+    async def send_telemetry(self, telemetry_payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Send a batch of sensor readings to the backend."""
+        return await self._request("POST", "/telemetry", data=telemetry_payload)

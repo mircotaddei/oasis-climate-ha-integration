@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 from collections.abc import Awaitable, Callable
+import uuid
 
 import voluptuous as vol
 
@@ -383,12 +384,15 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
 
         if user_input is not None:
             name = user_input["name"]
+            # Generate a unique local ID to comply with min_length=1 and uniqueness
+            local_id = str(uuid.uuid4())
+            
             try:
-                await self._client.thermostats.create(self._home_id, name)
+                await self._client.thermostats.create(self._home_id, name, local_id)
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                return await self.async_step_init()
+                return self.async_create_entry(title="", data={})
             except OasisApiError as err:
-                return await self._handle_api_error(err)
+                return await self._handle_api_error(err, next_step=self.async_step_thermostat_add)
             except Exception:
                 _LOGGER.exception("Error creating thermostat")
                 errors["base"] = "api_error"
@@ -601,10 +605,16 @@ class OasisOptionsFlowHandler(config_entries.OptionsFlow, OasisCommonFlow):
         # Determina device_class e dominio per il filtro
         device_class = SENSOR_DEVICE_CLASSES.get(backend_type)
         
-        # Logica per dominio: Window/Door/Presence sono binary_sensor, il resto sensor
-        domain_filter = "sensor"
-        if backend_type in ["window", "door", "presence"]:
-            domain_filter = "binary_sensor"
+        # --- DOMAIN FILTER LOGIC ------------------------------------------------------
+
+        # Logic for domain: Window/Door/Presence are binary_sensor, relay can be switch
+        if backend_type in["window", "door", "presence"]:
+            domain_filter = ["binary_sensor"]
+        elif backend_type == "relay_state":
+            domain_filter = ["binary_sensor", "switch", "input_boolean"]
+        else:
+            # Default to sensor, but allow numbers for modulation/pwm if needed
+            domain_filter =["sensor", "number", "input_number"]
 
         if user_input is not None:
             entity_id = user_input["entity_id"]

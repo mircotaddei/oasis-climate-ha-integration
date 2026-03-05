@@ -6,7 +6,7 @@ from typing import Any, Optional
 _LOGGER = logging.getLogger(__name__)
 
 
-# --- OASIS API ERRORS --------------------------------------------------------
+# --- OASIS API ERROR ----------------------------------------------------------
 
 class OasisApiError(Exception):
     """
@@ -37,7 +37,7 @@ class OasisApiError(Exception):
         super().__init__(msg)
 
 
-# --- OASIS BASE API ----------------------------------------------------------
+# --- OASIS BASE API -----------------------------------------------------------
 
 class OasisBaseApi:
     """Base class handling HTTP requests and authentication."""
@@ -49,7 +49,7 @@ class OasisBaseApi:
         self._api_key = api_key
 
 
-    # --- REQUEST ---------------------------------------------------------------
+    # --- REQUEST --------------------------------------------------------------
 
     async def _request(self, method: str, endpoint: str, data: dict | None = None) -> Any:
         """Execute an HTTP request with robust error handling."""
