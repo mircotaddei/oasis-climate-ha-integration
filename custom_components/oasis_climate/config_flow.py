@@ -223,7 +223,7 @@ class OasisConfigFlow(config_entries.ConfigFlow, OasisCommonFlow, domain=DOMAIN)
 
     # --- CREATE ENTRY ---------------------------------------------------------
 
-    def _async_create_entry(self, home_id: int, home_name: str) -> FlowResult:
+    def _async_create_entry(self, home_id: str, home_name: str) -> FlowResult:
         """Finalize the config entry creation."""
         self._async_abort_entries_match({CONF_HOME_ID: home_id})
 

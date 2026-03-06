@@ -27,7 +27,7 @@ class HomeApi(OasisBaseApi):
 
     # --- DELETE ---------------------------------------------------------------
 
-    async def delete(self, home_id: int) -> bool:
+    async def delete(self, home_id: str) -> bool:
         """Delete a home."""
         result = await self._request("DELETE", f"/homes/{home_id}")
         return result is not None

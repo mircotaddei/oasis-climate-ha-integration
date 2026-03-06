@@ -11,7 +11,7 @@ class ThermostatApi(OasisBaseApi):
 
     # --- CREATE ---------------------------------------------------------------
 
-    async def create(self, home_id: int, name: str, local_id: str) -> dict[str, Any] | None:
+    async def create(self, home_id: str, name: str, local_id: str) -> dict[str, Any] | None:
         """Create a new thermostat in a home."""
         payload = {
             "name": name,
